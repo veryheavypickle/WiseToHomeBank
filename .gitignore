@@ -2,3 +2,4 @@ venv
 .idea
 *.csv
 .DS_Store
+config.json
