@@ -3,4 +3,4 @@ Quick converter to convert CSV files from Wise to a CSV format that HomeBank wil
 
 
 ## Export statement
-Make sure "Display transactions with fees shown separately" is unchecked
+Make sure "Display transactions with fees shown separately" is checked as it will count fees as a seperate transaction
