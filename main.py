@@ -27,7 +27,7 @@ def processCSV(filePath):
 
     yoda = Yoda("config")
     extractCategoriesFromVendors(wiseDF, yoda)
-    extractDFInfo(wiseDF)
+    extractDFInfo(wiseDF, yoda)
 
 
 def extractCategoriesFromVendors(wiseDF, yoda):
@@ -68,7 +68,7 @@ def extractCategoriesFromVendors(wiseDF, yoda):
     yoda.write({"vendors": vendors})
 
 
-def extractDFInfo(wiseDF):
+def extractDFInfo(wiseDF, yoda):
     wiseAsDict = wiseDF.to_dict(orient="records")
 
     homeBankDF = pd.DataFrame()
@@ -76,15 +76,24 @@ def extractDFInfo(wiseDF):
     homeBankDF["date"] = wiseDF["Date"].apply(lambda wiseDate: wiseDateConverter(wiseDate))
 
     payments = []
-    for tx in wiseAsDict:
-        payments.append(extractPaymentCode(tx["TransferWise ID"], tx["Description"], float(tx["Amount"])))
-    homeBankDF["payment"] = payments
+    payees = []
+    categories = []
 
+    for tx in wiseAsDict:
+        paymentCode = extractPaymentCode(tx["TransferWise ID"], tx["Description"], float(tx["Amount"]))
+        merchant = extractMerchant(tx["Payee Name"], tx["Payer Name"], tx["Merchant"])
+        category = extractCategory(merchant, yoda, paymentCode)
+
+        payments.append(paymentCode)
+        payees.append(merchant)
+        categories.append(category)
+
+    homeBankDF["payment"] = payments
     homeBankDF["info"] = wiseDF["Payee Account Number"].apply(lambda IBAN: getIBAN(IBAN))
-    homeBankDF["payee"] = wiseDF["Merchant"]  # TODO make case to use 'Merchant' or 'Payee Name'
+    homeBankDF["payee"] = payees
     homeBankDF["memo"] = wiseDF["Description"]  # TODO expand with more info from different columns
     homeBankDF["amount"] = wiseDF["Amount"]
-    homeBankDF["category"] = wiseDF["Currency"]  # As Wise doesn't provide a category
+    homeBankDF["category"] = categories
     homeBankDF["tags"] = wiseDF["Currency"]  # As idk what this is
 
     # print(wiseAsDict)
@@ -105,6 +114,34 @@ def getIBAN(iban):
     return ""
 
 
+def extractMerchant(payee, payer, merchant):
+    if type(merchant) is not float and type(payee) is float and type(payer) is float:
+        return merchant
+    elif type(payee) is not float:
+        return payee
+    elif type(payer) is not float:
+        return payer
+    return ""
+
+
+def extractCategory(merchant, yoda, paymentCode):
+    vendors = yoda.contents()["vendors"]
+    if merchant not in vendors and merchant != "":
+        # for case that it is income
+        category = input("Input a category in format 'category:subcategory' for: {}: ".format(merchant))
+        vendors[merchant] = category
+        yoda.write({"vendors": vendors})
+    elif merchant != "":
+        category = vendors[merchant]
+    elif paymentCode == 4 or paymentCode == 9:
+        category = "Income:Conversions"
+    elif paymentCode == 10:
+        category = "Bills:Fees"
+    else:
+        category = "Miscellaneous"
+    return category
+
+
 def extractPaymentCode(wiseID, description, amount):
     # There was NO documentation on what this meant until I found
     # https://answers.launchpad.net/homebank/+question/664165
@@ -118,7 +155,7 @@ def extractPaymentCode(wiseID, description, amount):
     2: Cheque
     3: Cash
     4: Bank Transfer
-    5: Internal Transfer
+    5: Internal Transfer - Don't Use
     6: Debit Card
     7: Standing Order
     8: Electronic Payment
@@ -130,13 +167,13 @@ def extractPaymentCode(wiseID, description, amount):
     # This goes first because Wise Charges for: is for all types
     if "Wise Charges for: " in description or wiseID.startswith("OVERCHARGE_INCIDENTS"):
         return 10
-    elif wiseID.startswith("TRANSFER") and amount < 0:
+    elif (wiseID.startswith("TRANSFER") or wiseID.startswith("BALANCE"))and amount < 0:
+        # This will regard conversions from euros as bank transfers
         return 4
-    elif wiseID.startswith("BALANCE"):
-        return 5
     elif wiseID.startswith("CARD"):
         return 6
-    elif wiseID.startswith("TRANSFER") and amount > 0:
+    elif (wiseID.startswith("TRANSFER") or wiseID.startswith("BALANCE")) and amount > 0:
+        # This will regard conversions to euros as bank deposits
         return 9
     elif wiseID.startswith("DIRECT_DEBIT"):
         return 11
