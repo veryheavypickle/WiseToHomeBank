@@ -43,16 +43,29 @@ def extractCategoriesFromVendors(wiseDF, yoda):
     count = 0
     try:
         for vendor in listOfVendors:
+            vendor = str(vendor)
+            vendorLW = vendor.lower()
             if vendor in vendors:
                 category = vendors[vendor]
-            elif "taxi" in vendor.lower():
+            elif "taxi" in vendorLW:
                 category = "Transportation:Taxi Fares"
+            elif "mercadona" in vendorLW or "toogoodtogo.e" in vendorLW:
+                category = "Food:Groceries"
+            elif "nyx*" in vendorLW:
+                category = "Food:Eating Out"
+            elif "ebay" in vendorLW or "aliexpress" in vendorLW:
+                category = "Personal:Online Shopping"
+            elif "airbnb" in vendorLW:
+                category = "Entertainment:Accommodation"
+            elif vendor == "nan":
+                category = "Miscellaneous"
             else:
                 category = input("\nInput a category in format 'category:subcategory' for\n({0}/{1}){2}: ".format(count, total, vendor))
             vendors[vendor] = category
             count += 1
     except KeyboardInterrupt:
         yoda.write({"vendors": vendors})
+    yoda.write({"vendors": vendors})
 
 
 def extractDFInfo(wiseDF):
