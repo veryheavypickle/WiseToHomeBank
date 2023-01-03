@@ -1,5 +1,6 @@
 venv
 .idea
 *.csv
+*.xlsx
 .DS_Store
 config.json
